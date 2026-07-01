@@ -1,0 +1,43 @@
+name: Pokemon Center Monitor
+
+on:
+  schedule:
+    # Alle 10 Minuten. GitHub garantiert keine exakte Pünktlichkeit,
+    # bei hoher Last kann es ein paar Minuten Verzögerung geben.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}  # erlaubt manuelles Starten über den "Run workflow" Button
+
+permissions:
+  contents: write  # damit der Workflow seen_products.json zurückcommitten darf
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python-Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Playwright Chromium installieren
+        run: python -m playwright install --with-deps chromium
+
+      - name: Monitor ausführen
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor.py
+
+      - name: Änderungen an seen_products.json committen
+        run: |
+          git config user.name "pokemon-monitor-bot"
+          git config user.email "actions@github.com"
+          git add seen_products.json
+          git diff --staged --quiet || git commit -m "Update seen products [skip ci]"
+          git push
