@@ -60,6 +60,9 @@ def send_telegram(text: str) -> None:
 
 def fetch_products() -> list[dict]:
     products = []
+    debug_dir = Path(__file__).parent / "debug"
+    debug_dir.mkdir(exist_ok=True)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
@@ -69,14 +72,24 @@ def fetch_products() -> list[dict]:
                 "Chrome/125.0.0.0 Safari/537.36"
             ),
             locale="en-US",
+            viewport={"width": 1366, "height": 900},
         )
         page = context.new_page()
-        page.goto(CATEGORY_URL, wait_until="domcontentloaded", timeout=60000)
+
+        try:
+            page.goto(CATEGORY_URL, wait_until="networkidle", timeout=45000)
+        except Exception as e:
+            print(f"[i] networkidle-Timeout ({e}), fahre trotzdem fort.")
 
         try:
             page.click("text=Accept All", timeout=5000)
         except Exception:
             pass
+
+        # Ein bisschen scrollen, falls Produkte per Lazy-Load nachgeladen werden
+        for _ in range(4):
+            page.mouse.wheel(0, 1500)
+            page.wait_for_timeout(800)
 
         try:
             page.select_option("select[name='sort']", label="Newest", timeout=5000)
@@ -84,9 +97,19 @@ def fetch_products() -> list[dict]:
         except Exception:
             print("[i] Sort-Dropdown nicht gefunden - fahre ohne Sortierung fort.")
 
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(2000)
+
+        # --- DEBUG: immer Titel, URL und Screenshot festhalten ---
+        print(f"[debug] Seitentitel: {page.title()!r}")
+        print(f"[debug] Aktuelle URL: {page.url}")
+        body_text = page.inner_text("body")[:300].replace("\n", " ")
+        print(f"[debug] Body-Anfang: {body_text!r}")
+        page.screenshot(path=str(debug_dir / "screenshot.png"), full_page=True)
+        (debug_dir / "page.html").write_text(page.content())
+        # -----------------------------------------------------------
 
         links = page.query_selector_all('a[href*="/product/"]')
+        print(f"[debug] Anzahl gefundener 'a[href*=/product/]' Links: {len(links)}")
         for link in links:
             name = (link.get_attribute("title") or link.inner_text() or "").strip()
             href = link.get_attribute("href") or ""
@@ -141,3 +164,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
