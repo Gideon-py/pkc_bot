@@ -34,10 +34,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python monitor.py
 
+      - name: Debug-Dateien hochladen (Screenshot + HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-output
+          path: debug/
+          retention-days: 3
+
       - name: Änderungen an seen_products.json committen
+        if: always()
         run: |
           git config user.name "pokemon-monitor-bot"
           git config user.email "actions@github.com"
-          git add seen_products.json
-          git diff --staged --quiet || git commit -m "Update seen products [skip ci]"
-          git push
+          if [ -f seen_products.json ]; then
+            git add seen_products.json
+            git diff --staged --quiet || git commit -m "Update seen products [skip ci]"
+            git push
+          else
+            echo "seen_products.json existiert noch nicht - nichts zu committen."
+          fi
